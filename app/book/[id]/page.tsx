@@ -3,407 +3,632 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 
-export default function BookPage() {
+export default function BookingPage() {
+
   const params = useParams()
-  const cameraId = params.id as string
 
-  const [name, setName] = useState("")
-  const [date, setDate] = useState(
-    new Date().toISOString().split("T")[0]
-  )
+  const cameraId = params.id
 
-  const [selected, setSelected] = useState<number[]>([])
-  const [booked, setBooked] = useState<number[]>([])
-  const [myBookings, setMyBookings] = useState<any[]>([])
+  const [cameraName, setCameraName] = useState("")
 
-  const [loading, setLoading] = useState(false)
-  const [fullDay, setFullDay] = useState(false)
+  const [customerName, setCustomerName] = useState("")
 
-  const hours = [
-    7,8,9,10,11,12,13,14,15,16,17,18,19,20
+  const [date, setDate] = useState("")
+
+  const [selectedSlots, setSelectedSlots] =
+    useState<number[]>([])
+
+  const [bookedSlots, setBookedSlots] =
+    useState<number[]>([])
+
+  const [upcomingBookings, setUpcomingBookings] =
+    useState<any[]>([])
+
+  const [fullDay, setFullDay] =
+    useState(false)
+
+  const slots = [
+    7, 8, 9, 10, 11,
+    12, 13, 14, 15,
+    16, 17, 18, 19, 20
   ]
 
   useEffect(() => {
-    loadBookings()
-  }, [date])
 
-  async function loadBookings() {
+    const today = new Date()
+
+    setDate(
+      today.toISOString().split("T")[0]
+    )
+
+  }, [])
+
+  useEffect(() => {
+
+    getCamera()
+
+  }, [])
+
+  useEffect(() => {
+
+    if (date) {
+
+      getBookings()
+    }
+
+  }, [date, customerName])
+
+  // GET CAMERA
+
+  const getCamera = async () => {
+
+    const res = await fetch("/api/book")
+
+    const data = await res.json()
+
+    const cam = data.find(
+      (c: any) => c.id === cameraId
+    )
+
+    if (cam) {
+
+      setCameraName(cam.name)
+    }
+  }
+
+  // GET BOOKINGS
+
+  const getBookings = async () => {
+
     const res = await fetch(
       `/api/bookings?cameraId=${cameraId}&date=${date}`
     )
 
     const data = await res.json()
 
-    let slots: number[] = []
+    let booked: number[] = []
 
     data.forEach((b: any) => {
 
-      if (b.is_full_day) {
-        slots = hours
-        return
-      }
+      if (b.full_day) {
 
-      for (let i = b.start_hour; i < b.end_hour; i++) {
-        slots.push(i)
+        booked = slots
+
+      } else {
+
+        for (
+          let i = b.start_hour;
+          i < b.end_hour;
+          i++
+        ) {
+          booked.push(i)
+        }
       }
     })
 
-    setBooked(slots)
-    setMyBookings(data)
+    setBookedSlots(booked)
+
+    setUpcomingBookings(data)
   }
 
-  function toggleHour(hour: number) {
+  // SLOT SELECT
 
-    if (booked.includes(hour)) return
+  const toggleSlot = (hour: number) => {
 
-    if (selected.includes(hour)) {
-      setSelected(selected.filter((h) => h !== hour))
+    if (bookedSlots.includes(hour))
+      return
+
+    if (selectedSlots.includes(hour)) {
+
+      setSelectedSlots(
+        selectedSlots.filter(
+          (s) => s !== hour
+        )
+      )
+
     } else {
-      setSelected([...selected, hour])
+
+      setSelectedSlots([
+        ...selectedSlots,
+        hour
+      ])
     }
   }
 
-  async function confirmBooking() {
+  // BOOKING
 
-    if (!name) {
-      alert("Enter name")
+  const handleBooking = async () => {
+
+    if (!customerName) {
+
+      alert("Enter Name")
+
       return
     }
 
-    if (!fullDay && selected.length === 0) {
-      alert("Select slot")
+    if (
+      !fullDay &&
+      selectedSlots.length === 0
+    ) {
+
+      alert("Select Slot")
+
       return
     }
 
-    setLoading(true)
+    const startHour = fullDay
+      ? 0
+      : Math.min(...selectedSlots)
 
-    let body: any = {
-      customer_name: name,
-      camera_id: cameraId,
-      booking_date: date,
-    }
+    const endHour = fullDay
+      ? 24
+      : Math.max(...selectedSlots) + 1
 
-    if (fullDay) {
-      body.is_full_day = true
-      body.start_hour = 7
-      body.end_hour = 21
-    } else {
-      body.start_hour = Math.min(...selected)
-      body.end_hour = Math.max(...selected) + 1
-    }
+    const res = await fetch(
+      "/api/book",
+      {
 
-    const res = await fetch("/api/book", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    })
+        method: "POST",
 
-    const result = await res.json()
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
 
-    setLoading(false)
+        body: JSON.stringify({
 
-    if (result.success) {
-      alert("Booking Confirmed")
+          camera_id: cameraId,
 
-      setSelected([])
+          customer_name:
+            customerName,
+
+          booking_date: date,
+
+          start_hour: startHour,
+
+          end_hour: endHour,
+
+          full_day: fullDay
+        })
+      }
+    )
+
+    const data = await res.json()
+
+    if (data.success) {
+
+      alert("Booking Success")
+
+      setSelectedSlots([])
+
       setFullDay(false)
 
-      loadBookings()
+      getBookings()
+
     } else {
-      alert(result.error || "Booking failed")
+
+      alert(data.error)
     }
   }
 
-  async function cancelBooking(id: string) {
+  // SLOT FORMAT
 
-    const ok = confirm("Cancel booking?")
-
-    if (!ok) return
-
-    await fetch("/api/cancel-booking", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ id })
-    })
-
-    loadBookings()
-  }
-
-  function formatHour(hour: number) {
+  const formatSlot = (
+    hour: number
+  ) => {
 
     const start =
       hour > 12
         ? `${hour - 12} PM`
         : `${hour} AM`
 
+    const endHour = hour + 1
+
     const end =
-      hour + 1 > 12
-        ? `${hour + 1 - 12} PM`
-        : `${hour + 1} AM`
+      endHour > 12
+        ? `${endHour - 12} PM`
+        : `${endHour} AM`
 
     return `${start} - ${end}`
   }
 
   return (
-    <div
-      style={{
-        padding: 25,
-        fontFamily: "Arial",
-        background: "#f3f4f6",
-        minHeight: "100vh"
-      }}
-    >
 
-      <div
-        style={{
-          background: "white",
-          padding: 25,
-          borderRadius: 12
-        }}
-      >
+    <div style={pageStyle}>
 
-        <h2>📷 Camera Booking</h2>
+      {/* BOOKING CARD */}
+
+      <div style={cardStyle}>
+
+        <h1 style={titleStyle}>
+          📸 Camera Booking
+        </h1>
+
+        <h2 style={cameraTitle}>
+          {cameraName}
+        </h2>
 
         <input
           placeholder="Enter Your Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          value={customerName}
+          onChange={(e) =>
+            setCustomerName(
+              e.target.value
+            )
+          }
           style={inputStyle}
         />
 
-        <div style={{ marginTop: 20 }}>
-          <label>Select Date:</label>
+        <div
+          style={{
+            marginTop: "20px"
+          }}
+        >
 
-          <br /><br />
+          <label style={labelStyle}>
+            Select Date
+          </label>
 
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) =>
+              setDate(
+                e.target.value
+              )
+            }
             style={inputStyle}
           />
-        </div>
-
-        <div style={{ marginTop: 25 }}>
-
-          <button
-            onClick={() => {
-              setFullDay(!fullDay)
-              setSelected([])
-            }}
-            style={{
-              ...dayBtn,
-              background: fullDay
-                ? "#dc2626"
-                : "#2563eb"
-            }}
-          >
-            {fullDay
-              ? "Full Day Selected"
-              : "Book Full Day"}
-          </button>
 
         </div>
 
-        {!fullDay && (
-          <>
-            <h3 style={{ marginTop: 30 }}>
-              Select Time Slots
-            </h3>
-
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap"
-              }}
-            >
-              {hours.map((hour) => {
-
-                const isBooked =
-                  booked.includes(hour)
-
-                const isSelected =
-                  selected.includes(hour)
-
-                return (
-                  <button
-                    key={hour}
-                    disabled={isBooked}
-                    onClick={() => toggleHour(hour)}
-                    style={{
-                      padding: "14px 18px",
-                      borderRadius: 10,
-                      border: "none",
-                      cursor: isBooked
-                        ? "not-allowed"
-                        : "pointer",
-                      fontWeight: "bold",
-                      background: isBooked
-                        ? "#9ca3af"
-                        : isSelected
-                        ? "#ea580c"
-                        : "#16a34a",
-                      color: "white"
-                    }}
-                  >
-                    {formatHour(hour)}
-                  </button>
-                )
-              })}
-            </div>
-          </>
-        )}
+        {/* FULL DAY */}
 
         <button
-          onClick={confirmBooking}
-          disabled={loading}
-          style={confirmBtn}
+          onClick={() =>
+            setFullDay(!fullDay)
+          }
+          style={{
+            ...buttonStyle,
+
+            background:
+              fullDay
+                ? "#2563eb"
+                : "#16a34a"
+          }}
         >
-          {loading
-            ? "Booking..."
-            : "Confirm Booking"}
+          {
+            fullDay
+              ? "Full Day Selected"
+              : "Book Full Day"
+          }
         </button>
 
-        <div style={{ marginTop: 25 }}>
+        {/* TIME SLOTS */}
 
-          <div style={legend}>
-            <div
-              style={{
-                ...legendColor,
-                background: "#16a34a"
-              }}
-            />
-            Available
-          </div>
+        {
 
-          <div style={legend}>
-            <div
-              style={{
-                ...legendColor,
-                background: "#ea580c"
-              }}
-            />
-            Selected
-          </div>
+          !fullDay && (
 
-          <div style={legend}>
-            <div
-              style={{
-                ...legendColor,
-                background: "#9ca3af"
-              }}
-            />
-            Booked
-          </div>
+            <>
+              <h3 style={sectionTitle}>
+                Select Time Slots
+              </h3>
 
-        </div>
-      </div>
+              <div
+                style={slotContainer}
+              >
 
-      <div
-        style={{
-          marginTop: 30,
-          background: "white",
-          padding: 25,
-          borderRadius: 12
-        }}
-      >
-        <h2>My Bookings</h2>
+                {
+                  slots.map((hour) => {
 
-        {myBookings.length === 0 && (
-          <p>No bookings found</p>
-        )}
+                    const booked =
+                      bookedSlots.includes(
+                        hour
+                      )
 
-        {myBookings.map((b: any) => (
+                    const selected =
+                      selectedSlots.includes(
+                        hour
+                      )
 
-          <div
-            key={b.id}
-            style={{
-              border: "1px solid #ddd",
-              padding: 15,
-              marginBottom: 12,
-              borderRadius: 10,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center"
-            }}
-          >
+                    return (
 
-            <div>
-              <b>{b.customer_name}</b>
+                      <button
+                        key={hour}
+                        onClick={() =>
+                          toggleSlot(
+                            hour
+                          )
+                        }
+                        disabled={booked}
+                        style={{
+                          ...slotStyle,
 
-              <div>
-                {b.is_full_day
-                  ? "Full Day Booking"
-                  : `${formatHour(b.start_hour)} to ${formatHour(b.end_hour - 1)}`
+                          background:
+                            booked
+                              ? "#9ca3af"
+                              : selected
+                              ? "#ea580c"
+                              : "#16a34a"
+                        }}
+                      >
+                        {
+                          formatSlot(
+                            hour
+                          )
+                        }
+                      </button>
+                    )
+                  })
                 }
+
               </div>
+            </>
+          )
+        }
 
-              <div>{b.booking_date}</div>
-            </div>
+        {/* BOOK BUTTON */}
 
-            <button
-              onClick={() => cancelBooking(b.id)}
-              style={{
-                background: "red",
-                color: "white",
-                border: "none",
-                padding: "10px 14px",
-                borderRadius: 8,
-                cursor: "pointer"
-              }}
-            >
-              Cancel
-            </button>
+        <button
+          onClick={handleBooking}
+          style={{
+            ...buttonStyle,
+            marginTop: "30px"
+          }}
+        >
+          Confirm Booking
+        </button>
 
-          </div>
-        ))}
       </div>
+
+      {/* UPCOMING BOOKINGS */}
+
+      <div style={cardStyle}>
+
+        <h2 style={sectionTitle}>
+          Upcoming Bookings
+        </h2>
+
+        {
+
+          upcomingBookings.length === 0 ? (
+
+            <p style={emptyText}>
+              No Bookings
+            </p>
+
+          ) : (
+
+            upcomingBookings.map(
+              (b: any) => (
+
+                <div
+                  key={b.id}
+                  style={bookingCard}
+                >
+
+                  <div>
+
+                    <div
+                      style={
+                        bookingText
+                      }
+                    >
+                      {cameraName}
+                    </div>
+
+                    <div
+                      style={
+                        bookingSubText
+                      }
+                    >
+                      {
+                        b.customer_name
+                      }
+                    </div>
+
+                    <div
+                      style={
+                        bookingSubText
+                      }
+                    >
+                      {
+                        b.booking_date
+                      }
+                    </div>
+
+                    <div
+                      style={
+                        bookingSubText
+                      }
+                    >
+                      {
+                        b.full_day
+                          ? "Full Day"
+                          : `${b.start_hour}:00 - ${b.end_hour}:00`
+                      }
+                    </div>
+
+                  </div>
+
+                </div>
+              )
+            )
+          )
+        }
+
+      </div>
+
     </div>
   )
 }
 
-const inputStyle = {
-  padding: 12,
-  width: 320,
-  borderRadius: 8,
-  border: "1px solid #ccc",
-  marginTop: 10
+// STYLES
+
+const pageStyle: React.CSSProperties = {
+
+  minHeight: "100vh",
+
+  background: "#e2e8f0",
+
+  padding: "20px",
+
+  color: "#111827"
 }
 
-const confirmBtn = {
-  marginTop: 25,
-  padding: "14px 22px",
-  background: "black",
-  color: "white",
-  border: "none",
-  borderRadius: 10,
+const cardStyle: React.CSSProperties = {
+
+  background: "white",
+
+  borderRadius: "18px",
+
+  padding: "25px",
+
+  marginBottom: "25px",
+
+  boxShadow:
+    "0 4px 15px rgba(0,0,0,0.08)"
+}
+
+const titleStyle: React.CSSProperties = {
+
+  fontSize: "32px",
+
   fontWeight: "bold",
-  cursor: "pointer"
+
+  marginBottom: "10px",
+
+  color: "#0f172a"
 }
 
-const dayBtn = {
-  padding: "12px 18px",
-  color: "white",
-  border: "none",
-  borderRadius: 10,
+const cameraTitle: React.CSSProperties = {
+
+  fontSize: "22px",
+
   fontWeight: "bold",
-  cursor: "pointer"
+
+  marginBottom: "20px",
+
+  color: "#2563eb"
 }
 
-const legend = {
+const sectionTitle: React.CSSProperties = {
+
+  fontSize: "22px",
+
+  fontWeight: "bold",
+
+  marginBottom: "18px",
+
+  marginTop: "20px",
+
+  color: "#111827"
+}
+
+const labelStyle: React.CSSProperties = {
+
+  display: "block",
+
+  marginBottom: "8px",
+
+  fontWeight: "600",
+
+  color: "#374151"
+}
+
+const inputStyle: React.CSSProperties = {
+
+  width: "100%",
+
+  padding: "14px",
+
+  borderRadius: "10px",
+
+  border: "1px solid #cbd5e1",
+
+  background: "#f8fafc",
+
+  color: "#111827",
+
+  fontSize: "15px",
+
+  boxSizing: "border-box"
+}
+
+const slotContainer: React.CSSProperties = {
+
   display: "flex",
-  alignItems: "center",
-  gap: 10,
-  marginBottom: 10
+
+  flexWrap: "wrap",
+
+  gap: "12px"
 }
 
-const legendColor = {
-  width: 20,
-  height: 20,
-  borderRadius: 4
+const slotStyle: React.CSSProperties = {
+
+  border: "none",
+
+  color: "white",
+
+  padding: "14px 16px",
+
+  borderRadius: "10px",
+
+  fontWeight: "bold",
+
+  cursor: "pointer",
+
+  minWidth: "120px"
+}
+
+const buttonStyle: React.CSSProperties = {
+
+  border: "none",
+
+  background: "#2563eb",
+
+  color: "white",
+
+  padding: "14px 24px",
+
+  borderRadius: "10px",
+
+  fontWeight: "bold",
+
+  cursor: "pointer",
+
+  marginTop: "20px"
+}
+
+const bookingCard: React.CSSProperties = {
+
+  background: "#f8fafc",
+
+  padding: "18px",
+
+  borderRadius: "12px",
+
+  marginBottom: "12px"
+}
+
+const bookingText: React.CSSProperties = {
+
+  fontWeight: "bold",
+
+  fontSize: "18px",
+
+  color: "#111827"
+}
+
+const bookingSubText: React.CSSProperties = {
+
+  color: "#6b7280",
+
+  marginTop: "4px"
+}
+
+const emptyText: React.CSSProperties = {
+
+  color: "#6b7280"
 }

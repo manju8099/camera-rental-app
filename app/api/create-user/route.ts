@@ -7,7 +7,9 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(req: Request) {
+
   try {
+
     const body = await req.json()
 
     const {
@@ -15,7 +17,7 @@ export async function POST(req: Request) {
       mobile,
       email,
       password,
-      role,
+      role
     } = body
 
     // CREATE AUTH USER
@@ -24,17 +26,18 @@ export async function POST(req: Request) {
       await supabaseAdmin.auth.admin.createUser({
         email,
         password,
-        email_confirm: true,
+        email_confirm: true
       })
 
     if (error) {
+
       return NextResponse.json({
         success: false,
-        error: error.message,
+        error: error.message
       })
     }
 
-    // INSERT INTO USERS TABLE
+    // INSERT USER TABLE
 
     const { error: insertError } =
       await supabaseAdmin
@@ -45,24 +48,28 @@ export async function POST(req: Request) {
             name,
             mobile,
             email,
-            role,
-          },
+            password,
+            role
+          }
         ])
 
     if (insertError) {
+
       return NextResponse.json({
         success: false,
-        error: insertError.message,
+        error: insertError.message
       })
     }
 
     return NextResponse.json({
-      success: true,
+      success: true
     })
+
   } catch (err: any) {
+
     return NextResponse.json({
       success: false,
-      error: err.message,
+      error: err.message
     })
   }
 }
